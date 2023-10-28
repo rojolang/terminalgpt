@@ -12,7 +12,8 @@ vendor/
 .vscode/
 
 # Configuration files
-configs/*.json
+config/*.json
+!config/config.json.example  # Don't ignore the example config file
 
 # Environment files
 .env
