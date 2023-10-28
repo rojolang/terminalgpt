@@ -1,0 +1,40 @@
+# Binary files, typically the output of 'go build'
+cmd/main
+gpt/gpt
+helpers/helpers
+config/config
+
+# Dependency directories
+vendor/
+
+# IDE/Editor folders
+.idea/
+.vscode/
+
+# Configuration files
+configs/*.json
+
+# Environment files
+.env
+
+# Go module files
+go.sum
+
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.s
+
+# Folders likely to contain compiled files or cache files
+_obj
+_test
+_build
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
