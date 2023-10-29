@@ -1,11 +1,14 @@
 # TerminalGPT 🤖
 
-TerminalGPT is a command-line interface (CLI) tool that leverages OpenAI's GPT-4 model to interactively generate text completions. It's perfect for debugging, generating code, creating content, or just having a chat with an AI. 
+TerminalGPT is a command-line interface (CLI) tool that leverages OpenAI's GPT-4 model to interactively generate text completions. It's perfect for debugging, generating code, figuring out bottlenecks in your code or adding in better error handling
 ## Todo
+- Project Tech Stack (libraries and packages versions, OS version, etc)
+- Terminal context (from program errors)
+- Source code as context (code context)
 - Vector integration 
 - Multiple agent chain 
 - Add doc retrieval / web navigation tools
-- 
+  
 ## Table of Contents
 - [Features](#features)
 - [Installation](#installation)
