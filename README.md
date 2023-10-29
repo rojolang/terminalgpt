@@ -23,7 +23,7 @@ TerminalGPT is a command-line interface (CLI) tool that leverages OpenAI's GPT-3
 2. **Clone the Repository**
 
 ```
-git clone https://github.com/username/terminalgpt.git
+git clone https://github.com/rojolang/terminalgpt.git
 ```
 
 3. **Navigate to the Project Directory**
