@@ -1,4 +1,4 @@
-# TerminalGPT 🤖
+# Terminal GPT  🖥️
 
 TerminalGPT is a command-line interface (CLI) tool that leverages OpenAI's GPT-4 model to interactively generate text completions. It's perfect for debugging, generating code, figuring out bottlenecks in your code or adding in better error handling
 ## Todo
@@ -17,7 +17,7 @@ TerminalGPT is a command-line interface (CLI) tool that leverages OpenAI's GPT-4
 - [Contributing](#contributing)
 
 ## Features
-- Interactive mode: Communicate with GPT-4 in real-time right from your terminal.
+- Interactive Mode: Communicate with GPT-4 in real-time right from your terminal.
 - History: Keeps track of your interaction history with the AI.
 - Customizable: You can modify various parameters to suit your needs.
 
@@ -26,7 +26,7 @@ TerminalGPT is a command-line interface (CLI) tool that leverages OpenAI's GPT-4
 1. **Install Go**
 
    If Go is not installed on your system, you can download it [here](https://golang.org/dl/). Follow the instructions according to your operating system.
-
+####
 2. **Clone the Repository**
 
 ```

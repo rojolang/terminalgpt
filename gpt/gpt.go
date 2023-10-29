@@ -194,7 +194,7 @@ func (g *GPT) GenerateCompletion(userMessage string) (string, error) {
 }
 
 func (g *GPT) AppendHistory(message map[string]string) error {
-	historyFile, err := os.OpenFile("history.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	historyFile, err := os.OpenFile(config.HistoryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func (g *GPT) AppendHistory(message map[string]string) error {
 }
 
 func (g *GPT) ClearHistory() error {
-	err := os.Remove("history.json")
+	err := os.Remove(config.HistoryFile)
 	if err != nil {
 		return fmt.Errorf("Failed to clear history: %v", err)
 	}
@@ -241,7 +241,7 @@ func (g *GPT) GetHistoryLength() (int, int, error) {
 }
 
 func loadHistory() ([]map[string]string, error) {
-	historyFile, err := os.Open("history.json")
+	historyFile, err := os.Open(config.HistoryFile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []map[string]string{}, nil

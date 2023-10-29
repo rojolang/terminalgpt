@@ -11,7 +11,8 @@ import (
 )
 
 var (
-	ConfigFile       = "config.json"
+	ConfigFile       = os.Getenv("HOME") + "/.terminalgpt/config.json"
+	HistoryFile      = os.Getenv("HOME") + "/.terminalgpt/history.json"
 	StartTime        = time.Now()
 	CompletionAPIURL = "https://api.openai.com/v1/chat/completions"
 	SystemMessage    = "You are a useful assistant, your input is streamed into command line regarding coding and terminal questions for a user that uses macosx and codes in python and go and uses aws frequently."
@@ -51,6 +52,10 @@ type Message struct {
 }
 
 func LoadConfig(file string) (Config, error) {
+
+	// ensure the directory exists for config files
+	ensureConfigDirExists()
+
 	var config Config
 	configFile, err := os.Open(file)
 	if err != nil {
@@ -66,7 +71,18 @@ func LoadConfig(file string) (Config, error) {
 	return config, nil
 }
 
+func ensureConfigDirExists() {
+	dir := os.Getenv("HOME") + "/.terminalgpt"
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		os.MkdirAll(dir, 0755)
+	}
+}
+
 func SaveConfig(file string, config Config) error {
+
+	// ensure the directory exists for config files
+	ensureConfigDirExists()
+
 	configFile, err := os.Create(TempConfigFile)
 	if err != nil {
 		return fmt.Errorf("Failed to create temp config file: %v", err) // Add error context
@@ -165,7 +181,11 @@ func interactiveUpdate(config *Config) error {
 }
 
 func printCurrentConfig(config *Config) {
-	fmt.Println("\nCurrent configuration:")
+	fmt.Println("\nCurrent configuration:\n")
+
+	fmt.Printf("Config File Path: %s\n", ConfigFile)
+	fmt.Printf("History File Path: %s\n\n", HistoryFile)
+
 	fmt.Printf("1. Model: %s\n", config.ModelName)
 	fmt.Printf("2. Temperature: %f\n", config.Temperature)
 	fmt.Printf("3. Max tokens: %d\n", config.MaxTokens)
