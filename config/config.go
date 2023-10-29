@@ -1,23 +1,3 @@
-// Package config provides a set of functions and types to handle the configuration
-// of the application. It includes functions to load, save, and interactively update the configuration.
-// It uses a Config struct to hold all the configuration parameters. The package also
-// provides a function to interactively configure the settings.
-//
-// Variables:
-// - configFile: The name of the configuration file.
-// - startTime: The time at which the application started.
-// - completionAPIURL: The URL of the OpenAI API.
-// - systemMessage: The system message to be sent to the OpenAI API.
-//
-// Functions:
-// - LoadConfig: Loads the configuration from a file.
-// - SaveConfig: Saves the configuration to a file.
-// - GetDefaultConfig: Returns a Config struct with default settings.
-// - updateConfig: Updates a configuration setting based on user input.
-// - InteractiveConfigure: Allows the user to interactively configure the settings.
-// - interactiveUpdate: Interactively updates the configuration.
-// - printCurrentConfig: Prints the current configuration.
-// - updateConfigOption: Updates a configuration option based on user input.
 package config
 
 import (
@@ -35,18 +15,20 @@ var (
 	StartTime        = time.Now()
 	CompletionAPIURL = "https://api.openai.com/v1/chat/completions"
 	SystemMessage    = "You are a useful assistant, your input is streamed into command line regarding coding and terminal questions for a user that uses macosx and codes in python and go and uses aws frequently."
+	TempConfigFile   = "config_temp.json"
 )
 
-// Config struct holds all the configuration details
 type Config struct {
 	ModelName        string  `json:"model"`
 	Temperature      float64 `json:"temperature"`
+	MaxTotalTokens   int     `json:"max_total_tokens"`
 	MaxTokens        int     `json:"max_tokens"`
 	TopP             float64 `json:"top_p"`
 	FrequencyPenalty float64 `json:"frequency_penalty"`
 	PresencePenalty  float64 `json:"presence_penalty"`
 	Stream           bool    `json:"stream"`
 	PrintStats       bool    `json:"print_stats"`
+	History          bool    `json:"history"`
 	AuthorizationKey string  `json:"authorization_key"`
 	SystemMessage    string  `json:"system_message"`
 }
@@ -68,8 +50,6 @@ type Message struct {
 	Content string `json:"content"`
 }
 
-// LoadConfig function loads the configuration from a file.
-// It takes a filename as input and returns a Config struct and an error.
 func LoadConfig(file string) (Config, error) {
 	var config Config
 	configFile, err := os.Open(file)
@@ -82,41 +62,67 @@ func LoadConfig(file string) (Config, error) {
 	if err != nil {
 		return config, err
 	}
+
 	return config, nil
 }
 
-// SaveConfig function saves the configuration to a file.
-// It takes a filename and a Config struct as input and returns an error.
 func SaveConfig(file string, config Config) error {
-	configFile, err := os.Create(file)
+	configFile, err := os.Create(TempConfigFile)
 	if err != nil {
 		return err
 	}
 	defer configFile.Close()
 	jsonWriter := json.NewEncoder(configFile)
 	jsonWriter.SetIndent("", "\t")
-	jsonWriter.Encode(&config)
+	err = jsonWriter.Encode(&config)
+	if err != nil {
+		return err
+	}
+
+	err = os.Rename(TempConfigFile, file)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-// GetDefaultConfig function returns a Config struct with default settings.
 func GetDefaultConfig() Config {
 	return Config{
 		ModelName:        "gpt-4",
 		Temperature:      0.50,
-		MaxTokens:        2000,
+		MaxTotalTokens:   2000,
+		MaxTokens:        500,
 		TopP:             1.0,
 		FrequencyPenalty: 0.0,
 		PresencePenalty:  0.0,
 		Stream:           true,
 		PrintStats:       true,
+		History:          true,
+		SystemMessage:    "You are a useful assistant, your input is streamed into command line regarding coding and terminal questions for a user that uses macosx and codes in python and go and uses aws frequently.",
 		AuthorizationKey: os.Getenv("OPENAI_SECRET_KEY"),
 	}
 }
 
-// updateConfig function updates a configuration setting based on user input.
-// It takes a bufio.Reader, a prompt string, and a function to update the configuration setting.
-// It returns an error.
+func InteractiveConfigure() error {
+	config, err := LoadConfig(ConfigFile)
+	if err != nil {
+		fmt.Println("Failed to load config file, using default settings.")
+		config = GetDefaultConfig()
+	}
+
+	err = interactiveUpdate(&config)
+	if err != nil {
+		return fmt.Errorf("Failed to update configuration interactively: %v", err)
+	}
+
+	err = SaveConfig(ConfigFile, config)
+	if err != nil {
+		return fmt.Errorf("Failed to save updated config file: %v", err)
+	}
+
+	return nil
+}
+
 func updateConfig(reader *bufio.Reader, prompt string, updateFunc func(string) error) error {
 	fmt.Println(prompt)
 	answer, err := reader.ReadString('\n')
@@ -132,33 +138,9 @@ func updateConfig(reader *bufio.Reader, prompt string, updateFunc func(string) e
 	return nil
 }
 
-// InteractiveConfigure function allows the user to interactively configure the settings.
-func InteractiveConfigure() error {
-	// Load the configuration file.
-	config, err := LoadConfig(ConfigFile)
-	if err != nil {
-		fmt.Println("Failed to load config file, using default settings.")
-		// If the configuration file cannot be loaded, use the default settings.
-		config = GetDefaultConfig()
-		err = SaveConfig(ConfigFile, config)
-		if err != nil {
-			return fmt.Errorf("Failed to save default config file: %v", err)
-		}
-	}
-
-	err = interactiveUpdate(&config)
-	if err != nil {
-		return fmt.Errorf("Failed to update configuration interactively: %v", err)
-	}
-
-	return nil
-}
-
-// interactiveUpdate function interactively updates the configuration.
 func interactiveUpdate(config *Config) error {
 	reader := bufio.NewReader(os.Stdin)
 
-	// Interactively update the configuration.
 	for {
 		printCurrentConfig(config)
 
@@ -178,35 +160,31 @@ func interactiveUpdate(config *Config) error {
 			fmt.Printf("Failed to update configuration: %v\n", err)
 			continue
 		}
-
-		err = SaveConfig(ConfigFile, *config)
-		if err != nil {
-			return fmt.Errorf("Failed to save updated config file: %v", err)
-		}
 	}
 
 	return nil
 }
 
-// printCurrentConfig function prints the current configuration.
 func printCurrentConfig(config *Config) {
 	fmt.Println("\nCurrent configuration:")
 	fmt.Printf("1. Model: %s\n", config.ModelName)
 	fmt.Printf("2. Temperature: %f\n", config.Temperature)
 	fmt.Printf("3. Max tokens: %d\n", config.MaxTokens)
-	fmt.Printf("4. Top P: %f\n", config.TopP)
-	fmt.Printf("5. Frequency penalty: %f\n", config.FrequencyPenalty)
-	fmt.Printf("6. Presence penalty: %f\n", config.PresencePenalty)
-	fmt.Printf("7. Stream: %t\n", config.Stream)
-	fmt.Printf("8. Print stats: %t\n", config.PrintStats)
+	fmt.Printf("4. Max response tokens: %d\n", config.MaxTotalTokens)
+	fmt.Printf("5. Top P: %f\n", config.TopP)
+	fmt.Printf("6. Frequency penalty: %f\n", config.FrequencyPenalty)
+	fmt.Printf("7. Presence penalty: %f\n", config.PresencePenalty)
+	fmt.Printf("8. Stream: %t\n", config.Stream)
+	fmt.Printf("9. Print stats: %t\n", config.PrintStats)
+	fmt.Printf("10. History: %t\n", config.History)
+	fmt.Printf("11. System message: %s\n", config.SystemMessage)
 	if len(config.AuthorizationKey) >= 4 {
-		fmt.Printf("9. Authorization key: ****%s\n", config.AuthorizationKey[len(config.AuthorizationKey)-4:])
+		fmt.Printf("12. Authorization key: ****%s\n", config.AuthorizationKey[len(config.AuthorizationKey)-4:])
 	} else {
-		fmt.Println("9. Authorization key is missing.")
+		fmt.Println("12. Authorization key is missing.")
 	}
 }
 
-// updateConfigOption function updates a configuration option based on user input.
 func updateConfigOption(reader *bufio.Reader, answer string, config *Config) error {
 	var updateErr error
 	switch answer {
@@ -237,6 +215,15 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			return nil
 		})
 	case "4":
+		updateErr = updateConfig(reader, "Enter the max response tokens:", func(input string) error {
+			maxResponseTokens, err := strconv.Atoi(input)
+			if err != nil {
+				return fmt.Errorf("invalid max response tokens value: %v", err)
+			}
+			config.MaxTotalTokens = maxResponseTokens
+			return nil
+		})
+	case "5":
 		updateErr = updateConfig(reader, "Enter the Top P:", func(input string) error {
 			topP, err := strconv.ParseFloat(input, 64)
 			if err != nil {
@@ -245,7 +232,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.TopP = topP
 			return nil
 		})
-	case "5":
+	case "6":
 		updateErr = updateConfig(reader, "Enter the frequency penalty:", func(input string) error {
 			frequencyPenalty, err := strconv.ParseFloat(input, 64)
 			if err != nil {
@@ -254,7 +241,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.FrequencyPenalty = frequencyPenalty
 			return nil
 		})
-	case "6":
+	case "7":
 		updateErr = updateConfig(reader, "Enter the presence penalty:", func(input string) error {
 			presencePenalty, err := strconv.ParseFloat(input, 64)
 			if err != nil {
@@ -263,7 +250,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.PresencePenalty = presencePenalty
 			return nil
 		})
-	case "7":
+	case "8":
 		updateErr = updateConfig(reader, "Enter the stream (true/false):", func(input string) error {
 			stream, err := strconv.ParseBool(input)
 			if err != nil {
@@ -272,7 +259,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.Stream = stream
 			return nil
 		})
-	case "8":
+	case "9":
 		updateErr = updateConfig(reader, "Enter the print stats (true/false):", func(input string) error {
 			printStats, err := strconv.ParseBool(input)
 			if err != nil {
@@ -281,7 +268,24 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.PrintStats = printStats
 			return nil
 		})
-	case "9":
+	case "10":
+		updateErr = updateConfig(reader, "Keep History? (true/false):", func(input string) error {
+			history, err := strconv.ParseBool(input)
+			if err != nil {
+				return fmt.Errorf("invalid history value: %v", err)
+			}
+			config.History = history
+			return nil
+		})
+	case "11":
+		updateErr = updateConfig(reader, "Enter the system message:", func(input string) error {
+			if input == "" {
+				return fmt.Errorf("system message cannot be empty")
+			}
+			config.SystemMessage = input
+			return nil
+		})
+	case "12":
 		updateErr = updateConfig(reader, "Enter the authorization key:", func(input string) error {
 			if input == "" {
 				return fmt.Errorf("authorization key cannot be empty")
@@ -290,7 +294,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			return nil
 		})
 	default:
-		fmt.Println("Invalid option. Please enter a number between 1 and 9, or 'e' to exit.")
+		fmt.Println("Invalid option. Please enter a number between 1 and 12, or 'e' to exit.")
 	}
 
 	return updateErr
