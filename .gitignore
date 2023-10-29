@@ -4,6 +4,9 @@ gpt/gpt
 helpers/helpers
 config/config
 
+# Old files
+main-orig.go
+
 # Dependency directories
 vendor/
 

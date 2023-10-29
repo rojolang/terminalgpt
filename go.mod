@@ -1,4 +1,4 @@
-module terminalgpt
+module github.com/rojolang/terminalgpt
 
 go 1.21.3
 

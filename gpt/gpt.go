@@ -6,6 +6,7 @@
 // - CreateRequest: Creates a request for the GPT model.
 // - HandleResponse: Handles the response from the GPT model.
 // - GenerateCompletion: Generates a completion using the GPT model.
+// - GetTokenCount: Returns the token count of a text string for a specific model.
 package gpt
 
 import (
@@ -102,29 +103,45 @@ func HandleResponse(resp *http.Response, tkm *tiktoken.Tiktoken, userTokens int,
 // GenerateCompletion function generates a completion using the GPT model.
 // It takes a user message as input and returns a completion and an error.
 func GenerateCompletion(userMessage string) (string, error) {
-	config, err := config.ReadConfig(config.ConfigFile)
+	// Read the configuration file.
+	configuration, err := config.Configure()
 	if err != nil {
 		return "", err
 	}
 
-	req, err := CreateRequest(config, userMessage)
+	// Create a request for the GPT model.
+	req, err := CreateRequest(configuration, userMessage)
 	if err != nil {
 		return "", err
 	}
+
+	// Send the request and get the response.
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 
-	tkm, err := config.GetTokenCount(userMessage, config.ModelName)
+	// Get the token count of the user message.
+	tkm, err := GetTokenCount(userMessage, configuration.ModelName)
 	if err != nil {
 		return "", err
 	}
 	userTokens := len(tkm.Encode(userMessage, nil, nil))
 
-	if err := HandleResponse(resp, tkm, userTokens, config.PrintStats); err != nil {
+	// Handle the response from the GPT model.
+	if err := HandleResponse(resp, tkm, userTokens, configuration.PrintStats); err != nil {
 		return "", err
 	}
 
 	return "", nil
+}
+
+// GetTokenCount function returns the token count of a text string for a specific model.
+// It takes a text string and a model name as input and returns a Tiktoken and an error.
+func GetTokenCount(text string, modelName string) (*tiktoken.Tiktoken, error) {
+	tkm, err := tiktoken.EncodingForModel(modelName)
+	if err != nil {
+		return nil, fmt.Errorf("EncodingForModel: %v", err)
+	}
+	return tkm, nil
 }
