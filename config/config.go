@@ -31,10 +31,10 @@ import (
 )
 
 var (
-	configFile       = "config.json"
-	startTime        = time.Now()
-	completionAPIURL = "https://api.openai.com/v1/chat/completions"
-	systemMessage    = "You are a useful assistant, your input is streamed into command line regarding coding and terminal questions for a user that uses macosx and codes in python and go and uses aws frequently."
+	ConfigFile       = "config.json"
+	StartTime        = time.Now()
+	CompletionAPIURL = "https://api.openai.com/v1/chat/completions"
+	SystemMessage    = "You are a useful assistant, your input is streamed into command line regarding coding and terminal questions for a user that uses macosx and codes in python and go and uses aws frequently."
 )
 
 // Config struct holds all the configuration details
@@ -48,6 +48,24 @@ type Config struct {
 	Stream           bool    `json:"stream"`
 	PrintStats       bool    `json:"print_stats"`
 	AuthorizationKey string  `json:"authorization_key"`
+	SystemMessage    string  `json:"system_message"`
+}
+
+type Event struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int    `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index        int     `json:"index"`
+		Delta        Message `json:"delta"`
+		FinishReason string  `json:"finish_reason"`
+	} `json:"choices"`
+}
+
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 // LoadConfig function loads the configuration from a file.
@@ -117,12 +135,12 @@ func updateConfig(reader *bufio.Reader, prompt string, updateFunc func(string) e
 // InteractiveConfigure function allows the user to interactively configure the settings.
 func InteractiveConfigure() error {
 	// Load the configuration file.
-	config, err := LoadConfig(configFile)
+	config, err := LoadConfig(ConfigFile)
 	if err != nil {
 		fmt.Println("Failed to load config file, using default settings.")
 		// If the configuration file cannot be loaded, use the default settings.
 		config = GetDefaultConfig()
-		err = SaveConfig(configFile, config)
+		err = SaveConfig(ConfigFile, config)
 		if err != nil {
 			return fmt.Errorf("Failed to save default config file: %v", err)
 		}
@@ -161,7 +179,7 @@ func interactiveUpdate(config *Config) error {
 			continue
 		}
 
-		err = SaveConfig(configFile, *config)
+		err = SaveConfig(ConfigFile, *config)
 		if err != nil {
 			return fmt.Errorf("Failed to save updated config file: %v", err)
 		}

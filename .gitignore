@@ -6,7 +6,7 @@ config/config
 
 # Old files
 main-orig.go
-
+oldfiles/
 # Dependency directories
 vendor/
 

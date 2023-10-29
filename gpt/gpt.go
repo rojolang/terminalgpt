@@ -1,12 +1,6 @@
 // Package gpt provides a set of functions and types to handle the interaction with the GPT model.
 // It includes functions to create a payload, create a request, handle the response, and generate a completion.
-//
-// Functions:
-// - CreatePayload: Creates a payload for the GPT model.
-// - CreateRequest: Creates a request for the GPT model.
-// - HandleResponse: Handles the response from the GPT model.
-// - GenerateCompletion: Generates a completion using the GPT model.
-// - GetTokenCount: Returns the token count of a text string for a specific model.
+// It also includes a function to get the token count of a text string for a specific model.
 package gpt
 
 import (
@@ -22,9 +16,18 @@ import (
 	"github.com/rojolang/terminalgpt/config"
 )
 
-// CreatePayload function creates a payload for the GPT model.
-// It takes a Config struct and a user message as input and returns a payload string.
-func CreatePayload(config config.Config, userMessage string) string {
+// GPT represents a GPT model.
+type GPT struct {
+	cfg config.Config
+}
+
+// New creates a new GPT model with the given configuration.
+func New(cfg config.Config) *GPT {
+	return &GPT{cfg: cfg}
+}
+
+// CreatePayload creates a payload for the GPT model.
+func (g *GPT) CreatePayload(userMessage string) string {
 	return fmt.Sprintf(`{
 		"model": "%s",
 		"messages": [
@@ -43,26 +46,23 @@ func CreatePayload(config config.Config, userMessage string) string {
 		"frequency_penalty": %f,
 		"presence_penalty": %f,
 		"stream": %t
-	}`, config.ModelName, config.SystemMessage, userMessage, config.Temperature, config.MaxTokens, config.TopP, config.FrequencyPenalty, config.PresencePenalty, config.Stream)
+	}`, g.cfg.ModelName, config.SystemMessage, userMessage, g.cfg.Temperature, g.cfg.MaxTokens, g.cfg.TopP, g.cfg.FrequencyPenalty, g.cfg.PresencePenalty, g.cfg.Stream)
 }
 
-// CreateRequest function creates a request for the GPT model.
-// It takes a Config struct and a user message as input and returns an http.Request and an error.
-func CreateRequest(config config.Config, userMessage string) (*http.Request, error) {
-	payload := strings.NewReader(CreatePayload(config, userMessage))
+// CreateRequest creates a request for the GPT model.
+func (g *GPT) CreateRequest(userMessage string) (*http.Request, error) {
+	payload := strings.NewReader(g.CreatePayload(userMessage))
 	req, err := http.NewRequest("POST", config.CompletionAPIURL, payload)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", config.AuthorizationKey))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", g.cfg.AuthorizationKey))
 	return req, nil
 }
 
-// HandleResponse function handles the response from the GPT model.
-// It takes an http.Response, a Tiktoken, the number of user tokens, and a boolean indicating whether to print stats as input.
-// It returns an error.
-func HandleResponse(resp *http.Response, tkm *tiktoken.Tiktoken, userTokens int, printStats bool) error {
+// HandleResponse handles the response from the GPT model.
+func (g *GPT) HandleResponse(resp *http.Response, tkm *tiktoken.Tiktoken, userTokens int, printStats bool) error {
 	defer resp.Body.Close()
 	reader := bufio.NewReader(resp.Body)
 	assistantMsg := ""
@@ -100,17 +100,10 @@ func HandleResponse(resp *http.Response, tkm *tiktoken.Tiktoken, userTokens int,
 	return nil
 }
 
-// GenerateCompletion function generates a completion using the GPT model.
-// It takes a user message as input and returns a completion and an error.
-func GenerateCompletion(userMessage string) (string, error) {
-	// Read the configuration file.
-	configuration, err := config.Configure()
-	if err != nil {
-		return "", err
-	}
-
+// GenerateCompletion generates a completion using the GPT model.
+func (g *GPT) GenerateCompletion(userMessage string) (string, error) {
 	// Create a request for the GPT model.
-	req, err := CreateRequest(configuration, userMessage)
+	req, err := g.CreateRequest(userMessage)
 	if err != nil {
 		return "", err
 	}
@@ -122,14 +115,14 @@ func GenerateCompletion(userMessage string) (string, error) {
 	}
 
 	// Get the token count of the user message.
-	tkm, err := GetTokenCount(userMessage, configuration.ModelName)
+	tkm, err := GetTokenCount(userMessage, g.cfg.ModelName)
 	if err != nil {
 		return "", err
 	}
 	userTokens := len(tkm.Encode(userMessage, nil, nil))
 
 	// Handle the response from the GPT model.
-	if err := HandleResponse(resp, tkm, userTokens, configuration.PrintStats); err != nil {
+	if err := g.HandleResponse(resp, tkm, userTokens, g.cfg.PrintStats); err != nil {
 		return "", err
 	}
 
