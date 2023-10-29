@@ -54,13 +54,13 @@ func LoadConfig(file string) (Config, error) {
 	var config Config
 	configFile, err := os.Open(file)
 	if err != nil {
-		return config, err
+		return config, fmt.Errorf("Failed to open config file: %v", err) // Add error context
 	}
 	defer configFile.Close()
 	jsonParser := json.NewDecoder(configFile)
 	err = jsonParser.Decode(&config)
 	if err != nil {
-		return config, err
+		return config, fmt.Errorf("Failed to parse config file: %v", err) // Add error context
 	}
 
 	return config, nil
@@ -69,23 +69,22 @@ func LoadConfig(file string) (Config, error) {
 func SaveConfig(file string, config Config) error {
 	configFile, err := os.Create(TempConfigFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to create temp config file: %v", err) // Add error context
 	}
 	defer configFile.Close()
 	jsonWriter := json.NewEncoder(configFile)
 	jsonWriter.SetIndent("", "\t")
 	err = jsonWriter.Encode(&config)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to encode config: %v", err) // Add error context
 	}
 
 	err = os.Rename(TempConfigFile, file)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to rename temp config file: %v", err) // Add error context
 	}
 	return nil
 }
-
 func GetDefaultConfig() Config {
 	return Config{
 		ModelName:        "gpt-4",
