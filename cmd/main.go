@@ -14,6 +14,9 @@ import (
 func main() {
 	configFlag := flag.Bool("config", false, "Configure settings")
 	clearFlag := flag.Bool("clear", false, "Clear history")
+	runMode := flag.String("mode", "", "What mode to run in. (Default or empty: your config.json SystemMessage)")
+	workingDirectory := flag.String("dir", "", "What directory to run in. (Default or empty: current directory)")
+
 	flag.Parse()
 
 	_, err := os.Stat(config.ConfigFile)
@@ -29,11 +32,16 @@ func main() {
 	if err != nil {
 		color.Red("Failed to load config file, using default settings: %v\n", err)
 		cfg = config.GetDefaultConfig()
-		err = config.SaveConfig(config.ConfigFile, cfg)
+		err = config.SaveConfig(cfg)
 		if err != nil {
 			color.Red("Failed to save default config file: %v\n", err)
 			return
 		}
+	}
+
+	// if runMode is set, use that instead of the config.SystemMessage
+	if *runMode != "" {
+		cfg.SystemMessage = config.GetRunModeSystemMessage(*runMode, *workingDirectory)
 	}
 
 	g := gpt.New(&cfg)
@@ -44,8 +52,14 @@ func main() {
 		return
 	}
 
-	color.Cyan("Model: %s | Max Tokens: %d | Max Total Tokens: %d | Temperature: %.2f | History Length: %d | System Message: %s\n",
-		cfg.ModelName, cfg.MaxTokens, cfg.MaxTotalTokens, cfg.Temperature, entries, cfg.SystemMessage)
+	color.Cyan("Model: %s | Max Response Tokens: %d | Max Total Tokens: %d | Temperature: %.2f | History Length: %d | System Message: %s\n\n",
+		cfg.ModelName, cfg.MaxResponseTokens, cfg.MaxTotalTokens, cfg.Temperature, entries, cfg.SystemMessage)
+
+	// print in orange last user message
+	if cfg.LastUserMessage != "" {
+		color.Cyan("Last User Message: ")
+		color.Yellow("%s\n\n", cfg.LastUserMessage)
+	}
 
 	if *clearFlag {
 		err := g.ClearHistory()
@@ -62,12 +76,17 @@ func main() {
 		pink := color.New(color.FgHiMagenta)
 
 		// Use the color object to print the text
-		pink.Printf("--config, --clear, --exit, or...  type a prompt: ")
+		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php will auto inject file content): ")
 		userMessage, _ := reader.ReadString('\n')
 		userMessage = strings.TrimSpace(userMessage)
 
 		// Use ANSI escape code to move cursor up and clear line
 		fmt.Print("\033[1A\033[2K")
+
+		// if userMessage is empty, set userMessage to the last user message
+		if userMessage == "" {
+			userMessage = cfg.LastUserMessage
+		}
 
 		if userMessage == "--exit" || userMessage == "--quit" {
 			break
@@ -104,6 +123,47 @@ func main() {
 				return a
 			}
 			return b
+		}
+
+		// store last user message in config so if they rerun it will be pre-populated
+		cfg.LastUserMessage = userMessage
+		config.SaveConfig(cfg)
+
+		// Modify user message if running in runMode "laravel"... parse out anything that is *.php and inject file content
+		if *runMode == "laravel" {
+			// Split userMessage into array of strings
+			userMessageArray := strings.Split(userMessage, " ")
+
+			// build a dictionary/mapping of filename => filecontent
+			fileContentMap := make(map[string]string)
+
+			// loop through userMessageArray and find any *.php files
+			for _, potentialPhpFileName := range userMessageArray {
+				if strings.HasSuffix(potentialPhpFileName, ".php") {
+
+					phpFilePath, err := config.FindFile(potentialPhpFileName, *workingDirectory)
+					if err != nil {
+						panic(err)
+					}
+
+					// read file content
+					fileContent, err := os.ReadFile(phpFilePath)
+					if err != nil {
+						color.Red("Failed to read file content: %v\n", err)
+						continue
+					}
+
+					// add file content to fileContentMap
+					fileContentMap[potentialPhpFileName] = string(fileContent)
+				}
+			}
+
+			// loop through fileContentMap and append file content to userMessage
+			for filePath, fileContent := range fileContentMap {
+				// append file content with a prefix of "my current {filename} is: "
+				userMessage = userMessage + "\n\nMy  " + filePath + " file is:\n==\n" + fileContent + "\n==\n"
+			}
+
 		}
 
 		// Print the prompt immediately after the user presses enter

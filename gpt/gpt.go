@@ -51,10 +51,14 @@ func (g *GPT) CreatePayload(userMessage string) (string, int, error) {
 		return "", 0, err
 	}
 
+	println("userMessageTokens", userMessageTokens)
+	println("systemMessageTokens", systemMessageTokens)
+
 	totalRequestTokens := userMessageTokens + systemMessageTokens
 
-	if totalRequestTokens > g.cfg.MaxTotalTokens-g.cfg.MaxTokens {
-		return "", 0, fmt.Errorf("system message and user message alone exceed the maximum allowed tokens for the request")
+	// return error message with the counts of request tokens, max total etc with error
+	if totalRequestTokens > (g.cfg.MaxTotalTokens - g.cfg.MaxResponseTokens) {
+		return "", 0, fmt.Errorf("Request token count (%d) exceeds the maximum total token count (%d - %d = %d)", totalRequestTokens, g.cfg.MaxTotalTokens, g.cfg.MaxResponseTokens, (g.cfg.MaxTotalTokens - g.cfg.MaxResponseTokens))
 	}
 
 	if g.cfg.History {
@@ -64,7 +68,7 @@ func (g *GPT) CreatePayload(userMessage string) (string, int, error) {
 				return "", 0, err
 			}
 
-			if totalRequestTokens+historyTokens <= g.cfg.MaxTotalTokens-g.cfg.MaxTokens {
+			if totalRequestTokens+historyTokens <= g.cfg.MaxTotalTokens-g.cfg.MaxResponseTokens {
 				totalRequestTokens += historyTokens
 				history = append([]map[string]string{g.history[i]}, history...)
 			} else {
@@ -87,7 +91,7 @@ func (g *GPT) CreatePayload(userMessage string) (string, int, error) {
 		"frequency_penalty": %f,
 		"presence_penalty": %f,
 		"stream": %t
-	}`, g.cfg.ModelName, historyJSON, g.cfg.Temperature, g.cfg.MaxTokens, g.cfg.TopP, g.cfg.FrequencyPenalty, g.cfg.PresencePenalty, g.cfg.Stream)
+	}`, g.cfg.ModelName, historyJSON, g.cfg.Temperature, g.cfg.MaxResponseTokens, g.cfg.TopP, g.cfg.FrequencyPenalty, g.cfg.PresencePenalty, g.cfg.Stream)
 
 	return payload, totalRequestTokens, nil
 }

@@ -2,9 +2,12 @@ package config
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -20,18 +23,19 @@ var (
 )
 
 type Config struct {
-	ModelName        string  `json:"model"`
-	Temperature      float64 `json:"temperature"`
-	MaxTotalTokens   int     `json:"max_total_tokens"`
-	MaxTokens        int     `json:"max_tokens"`
-	TopP             float64 `json:"top_p"`
-	FrequencyPenalty float64 `json:"frequency_penalty"`
-	PresencePenalty  float64 `json:"presence_penalty"`
-	Stream           bool    `json:"stream"`
-	PrintStats       bool    `json:"print_stats"`
-	History          bool    `json:"history"`
-	AuthorizationKey string  `json:"authorization_key"`
-	SystemMessage    string  `json:"system_message"`
+	ModelName         string  `json:"model"`
+	Temperature       float64 `json:"temperature"`
+	MaxTotalTokens    int     `json:"max_total_tokens"`
+	MaxResponseTokens int     `json:"max_tokens"`
+	TopP              float64 `json:"top_p"`
+	FrequencyPenalty  float64 `json:"frequency_penalty"`
+	PresencePenalty   float64 `json:"presence_penalty"`
+	Stream            bool    `json:"stream"`
+	PrintStats        bool    `json:"print_stats"`
+	History           bool    `json:"history"`
+	AuthorizationKey  string  `json:"authorization_key"`
+	SystemMessage     string  `json:"system_message"`
+	LastUserMessage   string  `json:"last_user_message"`
 }
 
 type Event struct {
@@ -78,16 +82,16 @@ func ensureConfigDirExists() {
 	}
 }
 
-func SaveConfig(file string, config Config) error {
+func SaveConfig(config Config) error {
 
 	// ensure the directory exists for config files
 	ensureConfigDirExists()
 
-	configFile, err := os.Create(TempConfigFile)
+	configFile, err := os.Create(ConfigFile)
 	if err != nil {
-		return fmt.Errorf("Failed to create temp config file: %v", err) // Add error context
+		return fmt.Errorf("Failed to create config file: %v", err) // Add error context
 	}
-	defer configFile.Close()
+	//defer configFile.Close()
 	jsonWriter := json.NewEncoder(configFile)
 	jsonWriter.SetIndent("", "\t")
 	err = jsonWriter.Encode(&config)
@@ -95,26 +99,24 @@ func SaveConfig(file string, config Config) error {
 		return fmt.Errorf("Failed to encode config: %v", err) // Add error context
 	}
 
-	err = os.Rename(TempConfigFile, file)
-	if err != nil {
-		return fmt.Errorf("Failed to rename temp config file: %v", err) // Add error context
-	}
+	defer configFile.Close()
 	return nil
 }
 func GetDefaultConfig() Config {
 	return Config{
-		ModelName:        "gpt-4",
-		Temperature:      0.50,
-		MaxTotalTokens:   2000,
-		MaxTokens:        500,
-		TopP:             1.0,
-		FrequencyPenalty: 0.0,
-		PresencePenalty:  0.0,
-		Stream:           true,
-		PrintStats:       true,
-		History:          true,
-		SystemMessage:    "You are a useful assistant, your input is streamed into command line regarding coding and terminal questions for a user that uses macosx and codes in python and go and uses aws frequently.",
-		AuthorizationKey: os.Getenv("OPENAI_SECRET_KEY"),
+		ModelName:         "gpt-4",
+		Temperature:       0.50,
+		MaxTotalTokens:    8000,
+		MaxResponseTokens: 500,
+		TopP:              1.0,
+		FrequencyPenalty:  0.0,
+		PresencePenalty:   0.0,
+		Stream:            true,
+		PrintStats:        true,
+		History:           true,
+		SystemMessage:     "You are a useful assistant, your input is streamed into command line regarding coding and terminal questions for a user that uses macosx and codes in python and go and uses aws frequently.",
+		AuthorizationKey:  os.Getenv("OPENAI_SECRET_KEY"),
+		LastUserMessage:   "",
 	}
 }
 
@@ -130,7 +132,7 @@ func InteractiveConfigure() error {
 		return fmt.Errorf("Failed to update configuration interactively: %v", err)
 	}
 
-	err = SaveConfig(ConfigFile, config)
+	err = SaveConfig(config)
 	if err != nil {
 		return fmt.Errorf("Failed to save updated config file: %v", err)
 	}
@@ -188,8 +190,8 @@ func printCurrentConfig(config *Config) {
 
 	fmt.Printf("1. Model: %s\n", config.ModelName)
 	fmt.Printf("2. Temperature: %f\n", config.Temperature)
-	fmt.Printf("3. Max tokens: %d\n", config.MaxTokens)
-	fmt.Printf("4. Max response tokens: %d\n", config.MaxTotalTokens)
+	fmt.Printf("3. Max tokens: %d\n", config.MaxTotalTokens)
+	fmt.Printf("4. Max response tokens: %d\n", config.MaxResponseTokens)
 	fmt.Printf("5. Top P: %f\n", config.TopP)
 	fmt.Printf("6. Frequency penalty: %f\n", config.FrequencyPenalty)
 	fmt.Printf("7. Presence penalty: %f\n", config.PresencePenalty)
@@ -226,11 +228,11 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 		})
 	case "3":
 		updateErr = updateConfig(reader, "Enter the max tokens:", func(input string) error {
-			maxTokens, err := strconv.Atoi(input)
+			maxTotalTokens, err := strconv.Atoi(input)
 			if err != nil {
 				return fmt.Errorf("invalid max tokens value: %v", err)
 			}
-			config.MaxTokens = maxTokens
+			config.MaxTotalTokens = maxTotalTokens
 			return nil
 		})
 	case "4":
@@ -239,7 +241,8 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			if err != nil {
 				return fmt.Errorf("invalid max response tokens value: %v", err)
 			}
-			config.MaxTotalTokens = maxResponseTokens
+			config.MaxResponseTokens = maxResponseTokens
+
 			return nil
 		})
 	case "5":
@@ -317,4 +320,66 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 	}
 
 	return updateErr
+}
+func GetRunModeSystemMessage(runMode string, workingDirectory string) string {
+	if runMode == "laravel" {
+		cmd := exec.Command("sh", "-c", `git ls-files | grep -v '^public/' | grep -v '^storage/' | grep -v '^tests/' | sort | awk '
+BEGIN {
+    FS="/"
+    partCount = 0
+}
+{
+    split("", parts)  # Reset array
+    split($0, parts, FS)
+    for (i = 1; i <= length(parts); i++) {
+        if (i > partCount || parts[i] != prevParts[i]) {
+            for (j = 1; j < i; j++) {
+                printf("   ")
+            }
+            if (i < length(parts)) {
+                print("-- " parts[i])
+            } else {
+                print("- " parts[i])
+            }
+        }
+    }
+    partCount = length(parts)
+    split($0, prevParts, FS)
+}'`)
+
+		// Set the working directory for the command
+		if workingDirectory != "" {
+			cmd.Dir = workingDirectory
+		}
+
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		err := cmd.Run()
+		if err != nil {
+			fmt.Println("Error: ", err)
+		}
+
+		return fmt.Sprintf("I'm using laravel v10.10, livewire v3.x, tailwindcss v3.3 and alpinejs, also daisyui for components and tailwindcss forms plugin.\n\n===\nMy current directory and file structure is like this:\n\n%s\n===", out.String())
+	}
+
+	// return config.SystemMessage as default
+	return SystemMessage
+}
+
+func FindFile(name, dir string) (string, error) {
+	var result string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Name() == name {
+			result = path
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return result, nil
 }
