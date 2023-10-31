@@ -401,20 +401,21 @@ BEGIN {
 	return fmt.Sprintf("\n\n%s===\nMy current directory and file structure is:\n\n%s\n===", tmpSystemMessage, out.String())
 }
 
-func FindFile(name, dir string) (string, error) {
-	var result string
+// FindFiles finds all files with the given name in the given directory and its subdirectories.
+// It returns a slice of the paths of the found files, or an error if there was a problem walking the directory.
+func FindFiles(name, dir string) ([]string, error) {
+	var results []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.Name() == name {
-			result = path
-			return filepath.SkipDir
+			results = append(results, path)
 		}
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return result, nil
+	return results, nil
 }

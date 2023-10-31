@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,7 +10,9 @@ import (
 	"github.com/rojolang/terminalgpt/config"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type HistoryEntry struct {
@@ -102,15 +105,16 @@ func CountTokens(text string, modelName string) (int, error) {
 }
 
 // New functions...
-func HandleFlags() (*bool, *bool, *string, *string) {
+func HandleFlags() (*bool, *bool, *string, *string, *bool) {
 	configFlag := flag.Bool("config", false, "Configure settings")
 	clearFlag := flag.Bool("clear", false, "Clear history")
 	runMode := flag.String("mode", "", "What mode to run in. (Default or empty: your config.json SystemMessage)")
 	workingDirectory := flag.String("dir", "", "What directory to run in. (Default or empty: current directory)")
+	promptFlag := flag.Bool("prompt", false, "Run once and exit")
 
 	flag.Parse()
 
-	return configFlag, clearFlag, runMode, workingDirectory
+	return configFlag, clearFlag, runMode, workingDirectory, promptFlag
 }
 
 func LoadConfig(configFlag *bool) *config.Config {
@@ -163,77 +167,126 @@ func GetHistory(historyFile string) ([]HistoryEntry, error) {
 }
 
 func HandleLaravelMode(userMessage string, workingDirectory string) string {
-	// Split userMessage into array of strings
 	userMessageArray := strings.Split(userMessage, " ")
-
-	// build a dictionary/mapping of filename => filecontent
 	fileContentMap := make(map[string]string)
 
-	// loop through userMessageArray and find any *.php files
 	for _, potentialFileName := range userMessageArray {
 		if strings.HasSuffix(potentialFileName, ".php") {
-
-			codeFilePath, err := config.FindFile(potentialFileName, workingDirectory)
+			codeFilePaths, err := config.FindFiles(potentialFileName, workingDirectory)
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
 
-			// read file content
-			fileContent, err := ioutil.ReadFile(codeFilePath)
-			if err != nil {
-				fmt.Println("Failed to read file content: ", err)
+			if len(codeFilePaths) == 0 {
+				fmt.Println("No files named", potentialFileName, "found.")
 				continue
 			}
 
-			// add file content to fileContentMap
+			var codeFilePath string
+			if len(codeFilePaths) == 1 {
+				fmt.Println("No duplicates found, using the only", potentialFileName, "file.")
+				codeFilePath = codeFilePaths[0]
+			} else {
+				codeFilePath, err = selectFile(codeFilePaths)
+				if err != nil || codeFilePath == "" {
+					fmt.Println("Failed to select a file:", err)
+					continue
+				}
+			}
+
+			fileContent, err := ioutil.ReadFile(codeFilePath)
+			if err != nil {
+				fmt.Println("Failed to read file content:", err)
+				continue
+			}
+
 			fileContentMap[potentialFileName] = string(fileContent)
 		}
 	}
 
-	// loop through fileContentMap and append file content to userMessage
 	for filePath, fileContent := range fileContentMap {
-		// append file content with a prefix of "my current {filename} is: "
-		userMessage = userMessage + "\n\nMy  " + filePath + " file is:\n==\n" + fileContent + "\n==\n"
+		userMessage += "\n\nMy " + filePath + " file is:\n==\n" + fileContent + "\n==\n"
 	}
 
 	return userMessage
 }
 
 func HandleGoMode(userMessage string, workingDirectory string) string {
-	// Split userMessage into array of strings
 	userMessageArray := strings.Split(userMessage, " ")
-
-	// build a dictionary/mapping of filename => filecontent
 	fileContentMap := make(map[string]string)
 
-	// loop through userMessageArray and find any *.php files
 	for _, potentialFileName := range userMessageArray {
 		if strings.HasSuffix(potentialFileName, ".go") {
-
-			codeFilePath, err := config.FindFile(potentialFileName, workingDirectory)
+			codeFilePaths, err := config.FindFiles(potentialFileName, workingDirectory)
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
 
-			// read file content
-			fileContent, err := ioutil.ReadFile(codeFilePath)
-			if err != nil {
-				fmt.Println("Failed to read file content: ", err)
+			if len(codeFilePaths) == 0 {
+				fmt.Println("No files named", potentialFileName, "found.")
 				continue
 			}
 
-			// add file content to fileContentMap
+			var codeFilePath string
+			if len(codeFilePaths) == 1 {
+				fmt.Println("No duplicates found, using the only", potentialFileName, "file.")
+				codeFilePath = codeFilePaths[0]
+			} else {
+				codeFilePath, err = selectFile(codeFilePaths)
+				if err != nil || codeFilePath == "" {
+					fmt.Println("Failed to select a file:", err)
+					continue
+				}
+			}
+
+			fileContent, err := ioutil.ReadFile(codeFilePath)
+			if err != nil {
+				fmt.Println("Failed to read file content:", err)
+				continue
+			}
+
 			fileContentMap[potentialFileName] = string(fileContent)
 		}
 	}
 
-	// loop through fileContentMap and append file content to userMessage
 	for filePath, fileContent := range fileContentMap {
-		// append file content with a prefix of "my current {filename} is: "
-		userMessage = userMessage + "\n\nMy  " + filePath + " file is:\n==\n" + fileContent + "\n==\n"
+		userMessage += "\n\nMy " + filePath + " file is:\n==\n" + fileContent + "\n==\n"
 	}
 
 	return userMessage
+}
+
+// selectFile prompts the user to select a file from multiple files with the same name.
+// It shows the file size, last modified time, and the directory of each file for the user to make a decision.
+func selectFile(paths []string) (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	for i, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return "", err
+		}
+		fmt.Printf("%d: %s (size: %d bytes, last modified: %s)\n", i+1, path, info.Size(), info.ModTime().Format(time.RFC3339))
+	}
+
+	fmt.Println("Enter the number of the file you want to use, or 'e' to exit:")
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+
+	input = strings.TrimSpace(input)
+	if input == "e" {
+		return "", nil
+	}
+
+	i, err := strconv.Atoi(input)
+	if err != nil || i < 1 || i > len(paths) {
+		fmt.Println("Invalid input, please try again.")
+		return selectFile(paths)
+	}
+
+	return paths[i-1], nil
 }
