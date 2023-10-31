@@ -64,6 +64,8 @@ func main() {
 
 		if *runMode == "laravel" {
 			userMessage = helpers.HandleLaravelMode(userMessage, *workingDirectory)
+		} else if *runMode == "go" {
+			userMessage = helpers.HandleGoMode(userMessage, *workingDirectory)
 		}
 
 		fmt.Printf("Prompt: %s\n", userMessage)

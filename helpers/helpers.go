@@ -170,24 +170,62 @@ func HandleLaravelMode(userMessage string, workingDirectory string) string {
 	fileContentMap := make(map[string]string)
 
 	// loop through userMessageArray and find any *.php files
-	for _, potentialPhpFileName := range userMessageArray {
-		if strings.HasSuffix(potentialPhpFileName, ".php") {
+	for _, potentialFileName := range userMessageArray {
+		if strings.HasSuffix(potentialFileName, ".php") {
 
-			phpFilePath, err := config.FindFile(potentialPhpFileName, workingDirectory)
+			codeFilePath, err := config.FindFile(potentialFileName, workingDirectory)
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
 
 			// read file content
-			fileContent, err := ioutil.ReadFile(phpFilePath)
+			fileContent, err := ioutil.ReadFile(codeFilePath)
 			if err != nil {
 				fmt.Println("Failed to read file content: ", err)
 				continue
 			}
 
 			// add file content to fileContentMap
-			fileContentMap[potentialPhpFileName] = string(fileContent)
+			fileContentMap[potentialFileName] = string(fileContent)
+		}
+	}
+
+	// loop through fileContentMap and append file content to userMessage
+	for filePath, fileContent := range fileContentMap {
+		// append file content with a prefix of "my current {filename} is: "
+		userMessage = userMessage + "\n\nMy  " + filePath + " file is:\n==\n" + fileContent + "\n==\n"
+	}
+
+	return userMessage
+}
+
+func HandleGoMode(userMessage string, workingDirectory string) string {
+	// Split userMessage into array of strings
+	userMessageArray := strings.Split(userMessage, " ")
+
+	// build a dictionary/mapping of filename => filecontent
+	fileContentMap := make(map[string]string)
+
+	// loop through userMessageArray and find any *.php files
+	for _, potentialFileName := range userMessageArray {
+		if strings.HasSuffix(potentialFileName, ".go") {
+
+			codeFilePath, err := config.FindFile(potentialFileName, workingDirectory)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			// read file content
+			fileContent, err := ioutil.ReadFile(codeFilePath)
+			if err != nil {
+				fmt.Println("Failed to read file content: ", err)
+				continue
+			}
+
+			// add file content to fileContentMap
+			fileContentMap[potentialFileName] = string(fileContent)
 		}
 	}
 
