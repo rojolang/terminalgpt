@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/fatih/color"
-	"github.com/pkoukk/tiktoken-go"
 	"github.com/rojolang/terminalgpt/config"
+	"github.com/rojolang/terminalgpt/helpers"
 	"io"
 	"log"
 	"net/http"
@@ -18,59 +18,62 @@ import (
 
 type GPT struct {
 	cfg     *config.Config
-	history []map[string]string
+	history []helpers.HistoryEntry
 }
 
-func New(cfg *config.Config) *GPT {
-	history, _ := loadHistory()
+func (g *GPT) GetHistory() []helpers.HistoryEntry {
+	return g.history
+}
+
+func New(cfg *config.Config) (*GPT, error) {
+	history, err := helpers.LoadHistory(config.HistoryFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load history: %w", err)
+	}
 	return &GPT{
 		cfg:     cfg,
 		history: history,
-	}
+	}, nil
 }
 
-func (g *GPT) CreatePayload(userMessage string) (string, int, error) {
-	history := []map[string]string{
+func (g *GPT) CreatePayload(userMessage string) (string, int, int, error) {
+	history := []helpers.HistoryEntry{
 		{
-			"role":    "system",
-			"content": g.cfg.SystemMessage,
+			Role:    "system",
+			Content: g.cfg.SystemMessage,
 		},
 		{
-			"role":    "user",
-			"content": userMessage,
+			Role:    "user",
+			Content: userMessage,
 		},
 	}
 
-	userMessageTokens, err := CountTokens(userMessage, g.cfg.ModelName)
+	userMessageTokens, err := helpers.CountTokens(userMessage, g.cfg.ModelName)
 	if err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
 
-	systemMessageTokens, err := CountTokens(g.cfg.SystemMessage, g.cfg.ModelName)
+	systemMessageTokens, err := helpers.CountTokens(g.cfg.SystemMessage, g.cfg.ModelName)
 	if err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
-
-	println("userMessageTokens", userMessageTokens)
-	println("systemMessageTokens", systemMessageTokens)
 
 	totalRequestTokens := userMessageTokens + systemMessageTokens
 
-	// return error message with the counts of request tokens, max total etc with error
 	if totalRequestTokens > (g.cfg.MaxTotalTokens - g.cfg.MaxResponseTokens) {
-		return "", 0, fmt.Errorf("Request token count (%d) exceeds the maximum total token count (%d - %d = %d)", totalRequestTokens, g.cfg.MaxTotalTokens, g.cfg.MaxResponseTokens, (g.cfg.MaxTotalTokens - g.cfg.MaxResponseTokens))
+		return "", 0, 0, fmt.Errorf("Request token count (%d) exceeds the maximum total token count (%d - %d = %d)", totalRequestTokens, g.cfg.MaxTotalTokens, g.cfg.MaxResponseTokens, (g.cfg.MaxTotalTokens - g.cfg.MaxResponseTokens))
 	}
 
 	if g.cfg.History {
 		for i := len(g.history) - 1; i >= 0; i-- {
-			historyTokens, err := CountTokens(g.history[i]["content"], g.cfg.ModelName)
+			historyTokens, err := helpers.CountTokens(g.history[i].Content, g.cfg.ModelName)
 			if err != nil {
-				return "", 0, err
+				return "", 0, 0, err
 			}
 
 			if totalRequestTokens+historyTokens <= g.cfg.MaxTotalTokens-g.cfg.MaxResponseTokens {
 				totalRequestTokens += historyTokens
-				history = append([]map[string]string{g.history[i]}, history...)
+				history = append([]helpers.HistoryEntry{g.history[i]}, history...)
 			} else {
 				break
 			}
@@ -79,7 +82,7 @@ func (g *GPT) CreatePayload(userMessage string) (string, int, error) {
 
 	historyJSON, err := json.Marshal(history)
 	if err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
 
 	payload := fmt.Sprintf(`{
@@ -93,10 +96,10 @@ func (g *GPT) CreatePayload(userMessage string) (string, int, error) {
 		"stream": %t
 	}`, g.cfg.ModelName, historyJSON, g.cfg.Temperature, g.cfg.MaxResponseTokens, g.cfg.TopP, g.cfg.FrequencyPenalty, g.cfg.PresencePenalty, g.cfg.Stream)
 
-	return payload, totalRequestTokens, nil
+	return payload, userMessageTokens, systemMessageTokens, nil
 }
 
-func (g *GPT) HandleResponse(resp *http.Response, startTime time.Time, totalRequestTokens int) (string, int, error) {
+func (g *GPT) HandleResponse(resp *http.Response, startTime time.Time, totalRequestTokens int, userMessageTokens int, systemMessageTokens int) (string, int, int, int, int, error) {
 	defer resp.Body.Close()
 	reader := bufio.NewReader(resp.Body)
 	assistantMsg := ""
@@ -123,7 +126,7 @@ func (g *GPT) HandleResponse(resp *http.Response, startTime time.Time, totalRequ
 				break
 			}
 			log.Printf("Error reading response line: %v", err)
-			return "", 0, err
+			return "", 0, 0, 0, 0, err
 		}
 		if strings.HasPrefix(line, "data: ") {
 			jsonData := line[6:]
@@ -134,18 +137,18 @@ func (g *GPT) HandleResponse(resp *http.Response, startTime time.Time, totalRequ
 			err = json.Unmarshal([]byte(jsonData), &event)
 			if err != nil {
 				log.Printf("Error unmarshalling event: %v", err)
-				return "", 0, fmt.Errorf("Failed to unmarshal event: %v", err)
+				return "", 0, 0, 0, 0, fmt.Errorf("Failed to unmarshal event: %v", err)
 			}
 
-			responseTokens, err := CountTokens(event.Choices[0].Delta.Content, g.cfg.ModelName)
+			responseTokens, err := helpers.CountTokens(event.Choices[0].Delta.Content, g.cfg.ModelName)
 			if err != nil {
-				return "", 0, err
+				return "", 0, 0, 0, 0, err
 			}
 
 			totalResponseTokens += responseTokens
 
 			if isFirstChunk {
-				fmt.Printf("%-*s ", maxLabelLength, boldBlue(responseLabel))
+				fmt.Printf("\n%-*s ", maxLabelLength, boldBlue(responseLabel))
 				isFirstChunk = false
 			}
 
@@ -154,30 +157,25 @@ func (g *GPT) HandleResponse(resp *http.Response, startTime time.Time, totalRequ
 
 			fmt.Print(blue(tabbedChunk))
 			assistantMsg += tabbedChunk
-
-			if event.Choices[0].FinishReason == "stop" {
-				fmt.Println()
-				if g.cfg.PrintStats {
-					fmt.Printf("%-*s %s\n", maxLabelLength, "", fmt.Sprintf("\n\t📋 %d | ⌨️ %d | 📥 %d | ⏰ %.2fs\n", totalResponseTokens+totalRequestTokens, totalRequestTokens, totalResponseTokens, time.Since(startTime).Seconds()))
-				}
-			}
 		}
 	}
 
-	return assistantMsg, totalResponseTokens, nil
+	return assistantMsg, totalResponseTokens, userMessageTokens, systemMessageTokens, totalRequestTokens + totalResponseTokens, nil
 }
 
-func (g *GPT) GenerateCompletion(userMessage string) (string, error) {
+func (g *GPT) GenerateCompletion(userMessage string) (string, int, int, int, int, error) {
 	startTime := time.Now()
 
-	payload, totalRequestTokens, err := g.CreatePayload(userMessage)
+	payload, userMessageTokens, systemMessageTokens, err := g.CreatePayload(userMessage)
 	if err != nil {
-		return "", err
+		return "", 0, 0, 0, 0, err
 	}
+
+	totalRequestTokens := userMessageTokens + systemMessageTokens
 
 	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer([]byte(payload)))
 	if err != nil {
-		return "", err
+		return "", 0, 0, 0, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("OPENAI_SECRET_KEY"))
@@ -185,97 +183,13 @@ func (g *GPT) GenerateCompletion(userMessage string) (string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("Failed to send HTTP request: %v", err)
+		return "", 0, 0, 0, 0, fmt.Errorf("Failed to send HTTP request: %v", err)
 	}
 
-	response, _, err := g.HandleResponse(resp, startTime, totalRequestTokens)
-
+	response, responseTokens, userMessageTokens, systemMessageTokens, totalTokens, err := g.HandleResponse(resp, startTime, totalRequestTokens, userMessageTokens, systemMessageTokens)
 	if err != nil {
-		return "", fmt.Errorf("Failed to handle response: %v", err)
+		return "", 0, 0, 0, 0, fmt.Errorf("Failed to handle response: %v", err)
 	}
 
-	return response, nil
-}
-
-func (g *GPT) AppendHistory(message map[string]string) error {
-	historyFile, err := os.OpenFile(config.HistoryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer historyFile.Close()
-
-	messageJSON, err := json.Marshal(message)
-	if err != nil {
-		return fmt.Errorf("Failed to marshal message: %v", err)
-	}
-	_, err = historyFile.Write(messageJSON)
-	if err != nil {
-		return err
-	}
-	_, err = historyFile.WriteString("\n")
-	return err
-}
-
-func (g *GPT) ClearHistory() error {
-	err := os.Remove(config.HistoryFile)
-	if err != nil {
-		return fmt.Errorf("Failed to clear history: %v", err)
-	}
-	return nil
-}
-
-// GetHistoryLength returns the total token size of all the history and the number of entries
-func (g *GPT) GetHistoryLength() (int, int, error) {
-	tokenSize := 0
-	entries := len(g.history)
-
-	if entries == 0 {
-		return tokenSize, entries, nil
-	}
-
-	for _, message := range g.history {
-		tokens, err := CountTokens(message["content"], g.cfg.ModelName)
-		if err != nil {
-			return 0, 0, err
-		}
-		tokenSize += tokens
-	}
-
-	return tokenSize, entries, nil
-}
-
-func loadHistory() ([]map[string]string, error) {
-	historyFile, err := os.Open(config.HistoryFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []map[string]string{}, nil
-		}
-		return nil, err
-	}
-	defer historyFile.Close()
-
-	history := make([]map[string]string, 0)
-	scanner := bufio.NewScanner(historyFile)
-	for scanner.Scan() {
-		entry := make(map[string]string)
-		err := json.Unmarshal([]byte(scanner.Text()), &entry)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to unmarshal entry: %v", err)
-		}
-		history = append(history, entry)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return history, nil
-}
-
-func CountTokens(text string, modelName string) (int, error) {
-	tkm, err := tiktoken.EncodingForModel(modelName)
-	if err != nil {
-		return 0, fmt.Errorf("EncodingForModel: %v", err)
-	}
-	return len(tkm.Encode(text, nil, nil)), nil
+	return response, responseTokens, userMessageTokens, systemMessageTokens, totalTokens, nil
 }

@@ -23,6 +23,9 @@ var (
 )
 
 type Config struct {
+	AIProvider        string  `json:"ai_provider"`
+	AzureURL          string  `json:"azure_url"`
+	AzureAuthKey      string  `json:"azure_auth_key"`
 	ModelName         string  `json:"model"`
 	Temperature       float64 `json:"temperature"`
 	MaxTotalTokens    int     `json:"max_total_tokens"`
@@ -104,7 +107,10 @@ func SaveConfig(config Config) error {
 }
 func GetDefaultConfig() Config {
 	return Config{
-		ModelName:         "gpt-4",
+		AIProvider:        "gpt",
+		AzureURL:          "",
+		AzureAuthKey:      "",
+		ModelName:         "dev-gpt4-32k-4",
 		Temperature:       0.50,
 		MaxTotalTokens:    8000,
 		MaxResponseTokens: 500,
@@ -184,32 +190,55 @@ func interactiveUpdate(config *Config) error {
 
 func printCurrentConfig(config *Config) {
 	fmt.Println("\nCurrent configuration:\n")
+	fmt.Println("\nCurrent configuration:\n")
 
 	fmt.Printf("Config File Path: %s\n", ConfigFile)
 	fmt.Printf("History File Path: %s\n\n", HistoryFile)
 
-	fmt.Printf("1. Model: %s\n", config.ModelName)
-	fmt.Printf("2. Temperature: %f\n", config.Temperature)
-	fmt.Printf("3. Max tokens: %d\n", config.MaxTotalTokens)
-	fmt.Printf("4. Max response tokens: %d\n", config.MaxResponseTokens)
-	fmt.Printf("5. Top P: %f\n", config.TopP)
-	fmt.Printf("6. Frequency penalty: %f\n", config.FrequencyPenalty)
-	fmt.Printf("7. Presence penalty: %f\n", config.PresencePenalty)
-	fmt.Printf("8. Stream: %t\n", config.Stream)
-	fmt.Printf("9. Print stats: %t\n", config.PrintStats)
-	fmt.Printf("10. History: %t\n", config.History)
-	fmt.Printf("11. System message: %s\n", config.SystemMessage)
+	fmt.Printf("1. AI Provider: %s\n", config.AIProvider)
+	fmt.Printf("2. Azure URL: %s\n", config.AzureURL)
+	fmt.Printf("3. Azure Auth Key: %s\n", config.AzureAuthKey)
+	fmt.Printf("4. Model: %s\n", config.ModelName)
+	fmt.Printf("5. Temperature: %f\n", config.Temperature)
+	fmt.Printf("6. Max total tokens: %d\n", config.MaxTotalTokens)
+	fmt.Printf("7. Max response tokens: %d\n", config.MaxResponseTokens)
+	fmt.Printf("8. Top P: %f\n", config.TopP)
+	fmt.Printf("9. Frequency penalty: %f\n", config.FrequencyPenalty)
+	fmt.Printf("10. Presence penalty: %f\n", config.PresencePenalty)
+	fmt.Printf("11. Stream: %t\n", config.Stream)
+	fmt.Printf("12. Print stats: %t\n", config.PrintStats)
+	fmt.Printf("13. History: %t\n", config.History)
+	fmt.Printf("14. System message: %s\n", config.SystemMessage)
 	if len(config.AuthorizationKey) >= 4 {
-		fmt.Printf("12. Authorization key: ****%s\n", config.AuthorizationKey[len(config.AuthorizationKey)-4:])
+		fmt.Printf("15. Authorization key: ****%s\n", config.AuthorizationKey[len(config.AuthorizationKey)-4:])
 	} else {
-		fmt.Println("12. Authorization key is missing.")
+		fmt.Println("15. Authorization key is missing.")
 	}
+
 }
 
 func updateConfigOption(reader *bufio.Reader, answer string, config *Config) error {
 	var updateErr error
 	switch answer {
 	case "1":
+		updateErr = updateConfig(reader, "Enter the AI Provider:", func(input string) error {
+			if input == "" {
+				return fmt.Errorf("AI Provider cannot be empty")
+			}
+			config.AIProvider = input
+			return nil
+		})
+	case "2":
+		updateErr = updateConfig(reader, "Enter the Azure URL:", func(input string) error {
+			config.AzureURL = input
+			return nil
+		})
+	case "3":
+		updateErr = updateConfig(reader, "Enter the Azure Auth Key:", func(input string) error {
+			config.AzureAuthKey = input
+			return nil
+		})
+	case "4":
 		updateErr = updateConfig(reader, "Enter the model name:", func(input string) error {
 			if input == "" {
 				return fmt.Errorf("model name cannot be empty")
@@ -217,7 +246,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.ModelName = input
 			return nil
 		})
-	case "2":
+	case "5":
 		updateErr = updateConfig(reader, "Enter the temperature:", func(input string) error {
 			temp, err := strconv.ParseFloat(input, 64)
 			if err != nil {
@@ -226,8 +255,8 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.Temperature = temp
 			return nil
 		})
-	case "3":
-		updateErr = updateConfig(reader, "Enter the max tokens:", func(input string) error {
+	case "6":
+		updateErr = updateConfig(reader, "Enter the max total tokens:", func(input string) error {
 			maxTotalTokens, err := strconv.Atoi(input)
 			if err != nil {
 				return fmt.Errorf("invalid max tokens value: %v", err)
@@ -235,7 +264,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.MaxTotalTokens = maxTotalTokens
 			return nil
 		})
-	case "4":
+	case "7":
 		updateErr = updateConfig(reader, "Enter the max response tokens:", func(input string) error {
 			maxResponseTokens, err := strconv.Atoi(input)
 			if err != nil {
@@ -245,7 +274,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 
 			return nil
 		})
-	case "5":
+	case "8":
 		updateErr = updateConfig(reader, "Enter the Top P:", func(input string) error {
 			topP, err := strconv.ParseFloat(input, 64)
 			if err != nil {
@@ -254,7 +283,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.TopP = topP
 			return nil
 		})
-	case "6":
+	case "9":
 		updateErr = updateConfig(reader, "Enter the frequency penalty:", func(input string) error {
 			frequencyPenalty, err := strconv.ParseFloat(input, 64)
 			if err != nil {
@@ -263,7 +292,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.FrequencyPenalty = frequencyPenalty
 			return nil
 		})
-	case "7":
+	case "10":
 		updateErr = updateConfig(reader, "Enter the presence penalty:", func(input string) error {
 			presencePenalty, err := strconv.ParseFloat(input, 64)
 			if err != nil {
@@ -272,7 +301,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.PresencePenalty = presencePenalty
 			return nil
 		})
-	case "8":
+	case "11":
 		updateErr = updateConfig(reader, "Enter the stream (true/false):", func(input string) error {
 			stream, err := strconv.ParseBool(input)
 			if err != nil {
@@ -281,7 +310,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.Stream = stream
 			return nil
 		})
-	case "9":
+	case "12":
 		updateErr = updateConfig(reader, "Enter the print stats (true/false):", func(input string) error {
 			printStats, err := strconv.ParseBool(input)
 			if err != nil {
@@ -290,7 +319,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.PrintStats = printStats
 			return nil
 		})
-	case "10":
+	case "13":
 		updateErr = updateConfig(reader, "Keep History? (true/false):", func(input string) error {
 			history, err := strconv.ParseBool(input)
 			if err != nil {
@@ -299,7 +328,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.History = history
 			return nil
 		})
-	case "11":
+	case "14":
 		updateErr = updateConfig(reader, "Enter the system message:", func(input string) error {
 			if input == "" {
 				return fmt.Errorf("system message cannot be empty")
@@ -307,7 +336,7 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 			config.SystemMessage = input
 			return nil
 		})
-	case "12":
+	case "15":
 		updateErr = updateConfig(reader, "Enter the authorization key:", func(input string) error {
 			if input == "" {
 				return fmt.Errorf("authorization key cannot be empty")
