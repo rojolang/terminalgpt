@@ -41,6 +41,11 @@ func main() {
 
 	// if runMode is set, use that instead of the config.SystemMessage
 	if *runMode != "" {
+		// make sure run mode is either "laravel" or "go" or exit with error
+		if *runMode != "laravel" && *runMode != "go" {
+			color.Red("Invalid run mode: %s\n", *runMode)
+			return
+		}
 		cfg.SystemMessage = config.GetRunModeSystemMessage(*runMode, *workingDirectory)
 	}
 
@@ -76,7 +81,7 @@ func main() {
 		pink := color.New(color.FgHiMagenta)
 
 		// Use the color object to print the text
-		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php will auto inject file content): ")
+		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php, *.go will auto inject file content): ")
 		userMessage, _ := reader.ReadString('\n')
 		userMessage = strings.TrimSpace(userMessage)
 
@@ -130,7 +135,7 @@ func main() {
 		config.SaveConfig(cfg)
 
 		// Modify user message if running in runMode "laravel"... parse out anything that is *.php and inject file content
-		if *runMode == "laravel" {
+		if *runMode == "laravel" || *runMode == "go" {
 			// Split userMessage into array of strings
 			userMessageArray := strings.Split(userMessage, " ")
 
@@ -138,23 +143,23 @@ func main() {
 			fileContentMap := make(map[string]string)
 
 			// loop through userMessageArray and find any *.php files
-			for _, potentialPhpFileName := range userMessageArray {
-				if strings.HasSuffix(potentialPhpFileName, ".php") {
+			for _, potentialCodeFileName := range userMessageArray {
+				if strings.HasSuffix(potentialCodeFileName, ".php") || strings.HasSuffix(potentialCodeFileName, ".go") {
 
-					phpFilePath, err := config.FindFile(potentialPhpFileName, *workingDirectory)
+					codeFilePath, err := config.FindFile(potentialCodeFileName, *workingDirectory)
 					if err != nil {
 						panic(err)
 					}
 
 					// read file content
-					fileContent, err := os.ReadFile(phpFilePath)
+					fileContent, err := os.ReadFile(codeFilePath)
 					if err != nil {
 						color.Red("Failed to read file content: %v\n", err)
 						continue
 					}
 
 					// add file content to fileContentMap
-					fileContentMap[potentialPhpFileName] = string(fileContent)
+					fileContentMap[potentialCodeFileName] = string(fileContent)
 				}
 			}
 

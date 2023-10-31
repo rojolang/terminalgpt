@@ -322,8 +322,8 @@ func updateConfigOption(reader *bufio.Reader, answer string, config *Config) err
 	return updateErr
 }
 func GetRunModeSystemMessage(runMode string, workingDirectory string) string {
-	if runMode == "laravel" {
-		cmd := exec.Command("sh", "-c", `git ls-files | grep -v '^public/' | grep -v '^storage/' | grep -v '^tests/' | sort | awk '
+
+	cmd := exec.Command("sh", "-c", `git ls-files | grep -v '^public/' | grep -v '^storage/' | grep -v '^tests/' | sort | awk '
 BEGIN {
     FS="/"
     partCount = 0
@@ -347,23 +347,29 @@ BEGIN {
     split($0, prevParts, FS)
 }'`)
 
-		// Set the working directory for the command
-		if workingDirectory != "" {
-			cmd.Dir = workingDirectory
-		}
-
-		var out bytes.Buffer
-		cmd.Stdout = &out
-		err := cmd.Run()
-		if err != nil {
-			fmt.Println("Error: ", err)
-		}
-
-		return fmt.Sprintf("I'm using laravel v10.10, livewire v3.x, tailwindcss v3.3 and alpinejs, also daisyui for components and tailwindcss forms plugin.\n\n===\nMy current directory and file structure is like this:\n\n%s\n===", out.String())
+	// Set the working directory for the command
+	if workingDirectory != "" {
+		cmd.Dir = workingDirectory
 	}
 
-	// return config.SystemMessage as default
-	return SystemMessage
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		fmt.Println("Error: ", err)
+	}
+
+	var tmpSystemMessage = ""
+
+	if runMode == "laravel" {
+		tmpSystemMessage = fmt.Sprintf("I'm using laravel v10.10, livewire v3.x, tailwindcss v3.3 and alpinejs, also daisyui for components and tailwindcss forms plugin.")
+	} else if runMode == "go" {
+		tmpSystemMessage = "Im using golang."
+	} else {
+		return SystemMessage
+	}
+
+	return fmt.Sprintf("\n\n%s===\nMy current directory and file structure is:\n\n%s\n===", tmpSystemMessage, out.String())
 }
 
 func FindFile(name, dir string) (string, error) {
