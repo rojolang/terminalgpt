@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	configFlag, clearFlag, runMode, workingDirectory := helpers.HandleFlags()
+	configFlag, clearFlag, runMode, workingDirectory, promptFlag := helpers.HandleFlags()
 
 	// if working directory is empty then set it to the current directory
 	if *workingDirectory == "" {
@@ -32,7 +32,8 @@ func main() {
 
 	reader := bufio.NewReader(os.Stdin)
 
-	for {
+	// Define a function to handle the prompt and response
+	handlePrompt := func() {
 		pink := color.New(color.FgHiMagenta)
 		orange := color.New(color.FgHiYellow)
 		orange.Printf("Working Directory: %s\n", *workingDirectory)
@@ -51,28 +52,28 @@ func main() {
 		}
 
 		if userMessage == "--exit" || userMessage == "--quit" {
-			break
+			os.Exit(0)
 		}
 
 		if userMessage == "--config" {
 			err := config.InteractiveConfigure()
 			if err != nil {
-				continue
+				return
 			}
 			tempCfg, err := config.LoadConfig(config.ConfigFile)
 			if err != nil {
-				continue
+				return
 			}
 			cfg = &tempCfg
-			continue
+			return
 		}
 
 		if userMessage == "--clear" {
 			err := helpers.ClearHistory(config.HistoryFile)
 			if err != nil {
-				continue
+				return
 			}
-			continue
+			return
 		}
 
 		cfg.LastUserMessage = userMessage
@@ -89,7 +90,7 @@ func main() {
 
 		response, userMessageTokens, systemMessageTokens, responseTokens, historyTokens, err := common.GenerateCompletion(cfg, userMessage)
 		if err != nil {
-			continue
+			return
 		}
 
 		totalTokens := responseTokens + userMessageTokens + systemMessageTokens + historyTokens
@@ -101,7 +102,7 @@ func main() {
 			Content: userMessage,
 		}, config.HistoryFile)
 		if err != nil {
-			continue
+			return
 		}
 
 		err = helpers.AppendHistory(helpers.HistoryEntry{
@@ -109,12 +110,12 @@ func main() {
 			Content: response,
 		}, config.HistoryFile)
 		if err != nil {
-			continue
+			return
 		}
 
 		history, err := helpers.GetHistory(config.HistoryFile)
 		if err != nil {
-			continue
+			return
 		}
 		entries := len(history)
 
@@ -128,6 +129,16 @@ func main() {
 			historyTokens += tokenCount
 		}
 		fmt.Printf("History Length: %d, History Tokens: %d\n\n", entries, historyTokens)
+	}
 
+	// If prompt flag is set, handle the prompt once and exit
+	if *promptFlag {
+		handlePrompt()
+		os.Exit(0)
+	}
+
+	// If prompt flag is not set, keep looping
+	for {
+		handlePrompt()
 	}
 }
