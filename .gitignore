@@ -1,6 +1,7 @@
 # Binary files, typically the output of 'go build'
 cmd/main
 gpt/gpt
+gpt/main
 helpers/helpers
 config/config
 
