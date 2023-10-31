@@ -37,13 +37,28 @@ func main() {
 		pink := color.New(color.FgHiMagenta)
 		orange := color.New(color.FgHiYellow)
 		orange.Printf("Working Directory: %s\n", *workingDirectory)
+
 		// if run mode is not empty, print it out
 		if *runMode != "" {
 			orange.Printf("Run Mode: %s\n", *runMode)
 		}
+
 		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php will auto inject file content): ")
 		userMessage, _ := reader.ReadString('\n')
 		userMessage = strings.TrimSpace(userMessage)
+
+		// If the userMessage contains newlines, it means multiple lines were pasted.
+		if strings.Contains(userMessage, "\n") {
+			fmt.Println("You have entered multiple lines. Do you want to run this? (yes/no)")
+			confirmation, _ := reader.ReadString('\n')
+			confirmation = strings.TrimSpace(confirmation)
+
+			// If the user doesn't confirm, return and don't run the code.
+			if strings.ToLower(confirmation) != "yes" {
+				fmt.Println("Cancelled.")
+				return
+			}
+		}
 
 		fmt.Print("\033[1A\033[2K")
 
