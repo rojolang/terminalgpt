@@ -10,6 +10,7 @@ import (
 
 func GenerateCompletion(cfg *config.Config, userMessage string) (string, int, int, int, int, error) {
 	if cfg.AIProvider == "azure" {
+
 		// Load the history
 		history, err := helpers.LoadHistory(config.HistoryFile)
 		if err != nil {

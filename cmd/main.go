@@ -89,6 +89,10 @@ func main() {
 
 		response, userMessageTokens, systemMessageTokens, responseTokens, historyTokens, err := common.GenerateCompletion(cfg, userMessage)
 		if err != nil {
+			// print the error in red
+			red := color.New(color.FgRed).SprintFunc()
+			fmt.Printf("%s\n", red(err))
+
 			continue
 		}
 
