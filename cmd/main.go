@@ -81,7 +81,7 @@ func main() {
 		pink := color.New(color.FgHiMagenta)
 
 		// Use the color object to print the text
-		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php, *.go will auto inject file content): ")
+		pink.Printf("--config, --clear, --exit, or...  type a prompt (mode: %s) (note: *.php, *.go will auto inject file content): ", *runMode)
 		userMessage, _ := reader.ReadString('\n')
 		userMessage = strings.TrimSpace(userMessage)
 
