@@ -7,12 +7,22 @@ import (
 	"github.com/rojolang/terminalgpt/common"
 	"github.com/rojolang/terminalgpt/config"
 	"github.com/rojolang/terminalgpt/helpers"
+	"log"
 	"os"
 	"strings"
 )
 
 func main() {
 	configFlag, clearFlag, runMode, workingDirectory := helpers.HandleFlags()
+
+	// if working directory is empty then set it to the current directory
+	if *workingDirectory == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			log.Fatal(err)
+		}
+		*workingDirectory = wd
+	}
 
 	cfg := helpers.LoadConfig(configFlag)
 
@@ -24,6 +34,7 @@ func main() {
 
 	for {
 		pink := color.New(color.FgHiMagenta)
+		pink.Printf("Working Directory: %s\n", *workingDirectory)
 		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php will auto inject file content): ")
 		userMessage, _ := reader.ReadString('\n')
 		userMessage = strings.TrimSpace(userMessage)
