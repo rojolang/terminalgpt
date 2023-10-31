@@ -7,10 +7,28 @@ import (
 	"github.com/rojolang/terminalgpt/helpers"
 	"github.com/sirupsen/logrus"
 	"io"
+	"strings"
 	"time"
 )
 
 const LanguageModel = "gpt-4"
+
+// Add a function to detect code blocks and color them yellow
+func colorCodeBlocks(text string) string {
+	languages := []string{"1c", "abnf", "accesslog", "actionscript" /*... all other languages ...*/, "yaml", "zephir"}
+	yellow := "\033[33m"
+	reset := "\033[0m"
+
+	for _, lang := range languages {
+		prefix := "```" + lang
+		if strings.HasPrefix(text, prefix) {
+			text = strings.TrimPrefix(text, prefix)
+			text = strings.TrimSuffix(text, "```")
+			return yellow + text + reset
+		}
+	}
+	return text
+}
 
 func GenerateCompletion(userMessage, systemMessage, azureURL, azureAuthKey, modelName string, maxTokens int32, topP, temperature, frequencyPenalty, presencePenalty float32, timeout time.Duration, history []helpers.HistoryEntry) (string, int, int, int, int, error) {
 	userMessageTokens, err := helpers.CountTokens(userMessage, LanguageModel)
@@ -94,7 +112,11 @@ func GenerateCompletion(userMessage, systemMessage, azureURL, azureAuthKey, mode
 			if text == "" {
 				continue
 			}
-			print(text)
+
+			// Color the code blocks if they match any of the given languages
+			coloredText := colorCodeBlocks(text)
+			print(coloredText)
+
 			tokens, err := helpers.CountTokens(text, LanguageModel)
 			if err != nil {
 				return "", 0, 0, 0, 0, err
