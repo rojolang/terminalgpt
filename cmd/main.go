@@ -2,88 +2,34 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"github.com/fatih/color"
+	"github.com/rojolang/terminalgpt/common"
 	"github.com/rojolang/terminalgpt/config"
-	"github.com/rojolang/terminalgpt/gpt"
+	"github.com/rojolang/terminalgpt/helpers"
 	"os"
 	"strings"
 )
 
 func main() {
-	configFlag := flag.Bool("config", false, "Configure settings")
-	clearFlag := flag.Bool("clear", false, "Clear history")
-	runMode := flag.String("mode", "", "What mode to run in. (Default or empty: your config.json SystemMessage)")
-	workingDirectory := flag.String("dir", "", "What directory to run in. (Default or empty: current directory)")
+	configFlag, clearFlag, runMode, workingDirectory := helpers.HandleFlags()
 
-	flag.Parse()
+	cfg := helpers.LoadConfig(configFlag)
 
-	_, err := os.Stat(config.ConfigFile)
-	if os.IsNotExist(err) || *configFlag {
-		err := config.InteractiveConfigure()
-		if err != nil {
-			color.Red("Failed to configure settings: %v\n", err)
-			return
-		}
-	}
+	helpers.HandleRunMode(runMode, workingDirectory, cfg)
 
-	cfg, err := config.LoadConfig(config.ConfigFile)
-	if err != nil {
-		color.Red("Failed to load config file, using default settings: %v\n", err)
-		cfg = config.GetDefaultConfig()
-		err = config.SaveConfig(cfg)
-		if err != nil {
-			color.Red("Failed to save default config file: %v\n", err)
-			return
-		}
-	}
-
-	// if runMode is set, use that instead of the config.SystemMessage
-	if *runMode != "" {
-		cfg.SystemMessage = config.GetRunModeSystemMessage(*runMode, *workingDirectory)
-	}
-
-	g := gpt.New(&cfg)
-
-	_, entries, err := g.GetHistoryLength()
-	if err != nil {
-		color.Red("Failed to get history length: %v\n", err)
-		return
-	}
-
-	color.Cyan("Model: %s | Max Response Tokens: %d | Max Total Tokens: %d | Temperature: %.2f | History Length: %d | System Message: %s\n\n",
-		cfg.ModelName, cfg.MaxResponseTokens, cfg.MaxTotalTokens, cfg.Temperature, entries, cfg.SystemMessage)
-
-	// print in orange last user message
-	if cfg.LastUserMessage != "" {
-		color.Cyan("Last User Message: ")
-		color.Yellow("%s\n\n", cfg.LastUserMessage)
-	}
-
-	if *clearFlag {
-		err := g.ClearHistory()
-		if err != nil {
-			color.Red("Failed to clear history: %v\n", err)
-			return
-		}
-	}
+	helpers.HandleClearFlag(clearFlag)
 
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		// Create a new color object for pink
 		pink := color.New(color.FgHiMagenta)
-
-		// Use the color object to print the text
 		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php will auto inject file content): ")
 		userMessage, _ := reader.ReadString('\n')
 		userMessage = strings.TrimSpace(userMessage)
 
-		// Use ANSI escape code to move cursor up and clear line
 		fmt.Print("\033[1A\033[2K")
 
-		// if userMessage is empty, set userMessage to the last user message
 		if userMessage == "" {
 			userMessage = cfg.LastUserMessage
 		}
@@ -95,106 +41,75 @@ func main() {
 		if userMessage == "--config" {
 			err := config.InteractiveConfigure()
 			if err != nil {
-				color.Red("Failed to configure settings: %v\n", err)
 				continue
 			}
-			cfg, err = config.LoadConfig(config.ConfigFile)
+			tempCfg, err := config.LoadConfig(config.ConfigFile)
 			if err != nil {
-				color.Red("Failed to load config file: %v\n", err)
 				continue
 			}
-			g = gpt.New(&cfg)
+			cfg = &tempCfg
 			continue
 		}
 
 		if userMessage == "--clear" {
-			err := g.ClearHistory()
+			err := helpers.ClearHistory(config.HistoryFile)
 			if err != nil {
-				color.Red("Failed to clear history: %v\n", err)
 				continue
 			}
-			color.Blue("History cleared.")
 			continue
 		}
 
-		// Define max function inline
-		max := func(a, b int) int {
-			if a > b {
-				return a
-			}
-			return b
-		}
-
-		// store last user message in config so if they rerun it will be pre-populated
 		cfg.LastUserMessage = userMessage
-		config.SaveConfig(cfg)
+		config.SaveConfig(*cfg)
 
-		// Modify user message if running in runMode "laravel"... parse out anything that is *.php and inject file content
 		if *runMode == "laravel" {
-			// Split userMessage into array of strings
-			userMessageArray := strings.Split(userMessage, " ")
-
-			// build a dictionary/mapping of filename => filecontent
-			fileContentMap := make(map[string]string)
-
-			// loop through userMessageArray and find any *.php files
-			for _, potentialPhpFileName := range userMessageArray {
-				if strings.HasSuffix(potentialPhpFileName, ".php") {
-
-					phpFilePath, err := config.FindFile(potentialPhpFileName, *workingDirectory)
-					if err != nil {
-						panic(err)
-					}
-
-					// read file content
-					fileContent, err := os.ReadFile(phpFilePath)
-					if err != nil {
-						color.Red("Failed to read file content: %v\n", err)
-						continue
-					}
-
-					// add file content to fileContentMap
-					fileContentMap[potentialPhpFileName] = string(fileContent)
-				}
-			}
-
-			// loop through fileContentMap and append file content to userMessage
-			for filePath, fileContent := range fileContentMap {
-				// append file content with a prefix of "my current {filename} is: "
-				userMessage = userMessage + "\n\nMy  " + filePath + " file is:\n==\n" + fileContent + "\n==\n"
-			}
-
+			userMessage = helpers.HandleLaravelMode(userMessage, *workingDirectory)
 		}
 
-		// Print the prompt immediately after the user presses enter
-		promptLabel := "Prompt:"
-		responseLabel := "Response:"
-		maxLabelLength := max(len(promptLabel), len(responseLabel))
-		fmt.Printf("%-*s %s\n", maxLabelLength, color.GreenString(promptLabel), userMessage)
+		fmt.Printf("Prompt: %s\n", userMessage)
+		fmt.Print("Response: ")
 
-		_, err = g.GenerateCompletion(userMessage)
+		response, userMessageTokens, systemMessageTokens, responseTokens, historyTokens, err := common.GenerateCompletion(cfg, userMessage)
 		if err != nil {
-			color.Red("Failed to generate completion: %v\n", err)
 			continue
 		}
 
-		err = g.AppendHistory(map[string]string{
-			"role":    "user",
-			"content": userMessage,
-		})
+		totalTokens := responseTokens + userMessageTokens + systemMessageTokens + historyTokens
+
+		fmt.Printf("\n📥 %d | 📋 %d | ⌨️ %d | 📜 %d\n", responseTokens, totalTokens, userMessageTokens, historyTokens)
+
+		err = helpers.AppendHistory(helpers.HistoryEntry{
+			Role:    "user",
+			Content: userMessage,
+		}, config.HistoryFile)
 		if err != nil {
-			color.Red("Failed to append user message to history: %v\n", err)
 			continue
 		}
 
-		// Add print statement to check if history is updated
-		_, entries, err := g.GetHistoryLength()
+		err = helpers.AppendHistory(helpers.HistoryEntry{
+			Role:    "assistant",
+			Content: response,
+		}, config.HistoryFile)
 		if err != nil {
-			color.Red("Failed to get history length: %v\n", err)
-			return
+			continue
 		}
 
-		fmt.Printf("%-*s %s\n", maxLabelLength, "", color.CyanString("History Length: %d\n\n", entries))
+		history, err := helpers.GetHistory(config.HistoryFile)
+		if err != nil {
+			continue
+		}
+		entries := len(history)
+
+		historyTokens = 0
+		for _, entry := range history {
+			tokenCount, err := helpers.CountTokens(entry.Content, "gpt-4")
+			if err != nil {
+				fmt.Println("Error counting tokens:", err)
+				continue
+			}
+			historyTokens += tokenCount
+		}
+		fmt.Printf("History Length: %d, History Tokens: %d\n\n", entries, historyTokens)
+
 	}
-
 }
