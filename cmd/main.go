@@ -34,7 +34,12 @@ func main() {
 
 	for {
 		pink := color.New(color.FgHiMagenta)
-		pink.Printf("Working Directory: %s\n", *workingDirectory)
+		orange := color.New(color.FgHiYellow)
+		orange.Printf("Working Directory: %s\n", *workingDirectory)
+		// if run mode is not empty, print it out
+		if *runMode != "" {
+			orange.Printf("Run Mode: %s\n", *runMode)
+		}
 		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php will auto inject file content): ")
 		userMessage, _ := reader.ReadString('\n')
 		userMessage = strings.TrimSpace(userMessage)
