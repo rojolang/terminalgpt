@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	configFlag, clearFlag, runMode, workingDirectory, promptFlag := helpers.HandleFlags()
+	configFlag, clearFlag, runMode, workingDirectory, prompt := helpers.HandleFlags()
 
 	// if working directory is empty then set it to the current directory
 	if *workingDirectory == "" {
@@ -33,7 +33,7 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 
 	// Define a function to handle the prompt and response
-	handlePrompt := func() {
+	handlePrompt := func(userMessage string) {
 		pink := color.New(color.FgHiMagenta)
 		orange := color.New(color.FgHiYellow)
 		orange.Printf("Working Directory: %s\n", *workingDirectory)
@@ -43,21 +43,11 @@ func main() {
 			orange.Printf("Run Mode: %s\n", *runMode)
 		}
 
-		pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php will auto inject file content): ")
-		userMessage, _ := reader.ReadString('\n')
-		userMessage = strings.TrimSpace(userMessage)
-
-		// If the userMessage contains newlines, it means multiple lines were pasted.
-		if strings.Contains(userMessage, "\n") {
-			fmt.Println("You have entered multiple lines. Do you want to run this? (yes/no)")
-			confirmation, _ := reader.ReadString('\n')
-			confirmation = strings.TrimSpace(confirmation)
-
-			// If the user doesn't confirm, return and don't run the code.
-			if strings.ToLower(confirmation) != "yes" {
-				fmt.Println("Cancelled.")
-				return
-			}
+		// If userMessage is empty, ask for input
+		if userMessage == "" {
+			pink.Printf("--config, --clear, --exit, or...  type a prompt (note: *.php will auto inject file content): ")
+			userMessage, _ = reader.ReadString('\n')
+			userMessage = strings.TrimSpace(userMessage)
 		}
 
 		fmt.Print("\033[1A\033[2K")
@@ -146,14 +136,14 @@ func main() {
 		fmt.Printf("History Length: %d, History Tokens: %d\n\n", entries, historyTokens)
 	}
 
-	// If prompt flag is set, handle the prompt once and exit
-	if *promptFlag {
-		handlePrompt()
+	if len(prompt) > 0 {
+		userMessage := strings.Join(prompt, " ")
+		handlePrompt(userMessage)
 		os.Exit(0)
 	}
 
 	// If prompt flag is not set, keep looping
 	for {
-		handlePrompt()
+		handlePrompt("")
 	}
 }

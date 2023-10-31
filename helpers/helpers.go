@@ -105,16 +105,18 @@ func CountTokens(text string, modelName string) (int, error) {
 }
 
 // New functions...
-func HandleFlags() (*bool, *bool, *string, *string, *bool) {
+func HandleFlags() (*bool, *bool, *string, *string, []string) {
 	configFlag := flag.Bool("config", false, "Configure settings")
 	clearFlag := flag.Bool("clear", false, "Clear history")
 	runMode := flag.String("mode", "", "What mode to run in. (Default or empty: your config.json SystemMessage)")
 	workingDirectory := flag.String("dir", "", "What directory to run in. (Default or empty: current directory)")
-	promptFlag := flag.Bool("prompt", false, "Run once and exit")
 
 	flag.Parse()
 
-	return configFlag, clearFlag, runMode, workingDirectory, promptFlag
+	// Get any additional arguments after the flags as the prompt
+	prompt := flag.Args()
+
+	return configFlag, clearFlag, runMode, workingDirectory, prompt
 }
 
 func LoadConfig(configFlag *bool) *config.Config {
